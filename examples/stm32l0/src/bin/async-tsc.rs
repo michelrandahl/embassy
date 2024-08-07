@@ -54,40 +54,52 @@ async fn main(_spawner: embassy_executor::Spawner) {
     let device_config = embassy_stm32::Config::default();
     let context = embassy_stm32::init(device_config);
 
+    let mut pin_group : PinGroup<embassy_stm32::peripherals::TSC, G4> =
+        PinGroup::new();
+    pin_group.set_io1(context.PA9, PinType::Sample);
+    pin_group.set_io2(context.PA10, PinType::Channel);
+    pin_group.set_io3(context.PA11, PinType::Channel);
+
+    let group = Group::Four;
+    let sample_pin : u32 = TscIOPin::Group4Io1.into();
+    let chan1 = TscIOPin::Group4Io2;
+    let chan2 = TscIOPin::Group4Io3;
+
     let config = tsc::Config {
-        ct_pulse_high_length: ChargeTransferPulseCycle::_4,
-        ct_pulse_low_length: ChargeTransferPulseCycle::_4,
+        ct_pulse_high_length: ChargeTransferPulseCycle::_16,
+        ct_pulse_low_length: ChargeTransferPulseCycle::_16,
         spread_spectrum: false,
         spread_spectrum_deviation: SSDeviation::new(2).unwrap(),
         spread_spectrum_prescaler: false,
         pulse_generator_prescaler: PGPrescalerDivider::_16,
-        max_count_value: MaxCount::_255,
+        max_count_value: MaxCount::_8191,
         io_default_mode: false,
         synchro_pin_polarity: false,
         acquisition_mode: false,
         max_count_interrupt: false,
-        channel_ios: TscIOPin::Group1Io1.into(),
+        //channel_ios: TscIOPin::Group1Io2 | TscIOPin::Group1Io3,
+        //channel_ios: TscIOPin::Group1Io2.into(),
+        //channel_ios: TscIOPin::Group1Io2 | TscIOPin::Group1Io4,
+        channel_ios: chan1 | chan2,
+        //channel_ios: 0,
         shield_ios: 0, // no shield
-        sampling_ios: TscIOPin::Group1Io2.into(),
+        sampling_ios: sample_pin,
     };
 
-    let mut g1: PinGroup<embassy_stm32::peripherals::TSC, G1> = PinGroup::new();
-    g1.set_io1(context.PA0, PinType::Sample);
-    g1.set_io2(context.PA1, PinType::Channel);
 
     let mut touch_controller = tsc::Tsc::new_async(
         context.TSC,
-        Some(g1),
+        None, //Some(g1),
         None,
         None,
-        None,
+        Some(pin_group),
         None,
         None,
         None,
         None,
         config,
         Irqs,
-    );
+    ).unwrap();
 
     // Check if TSC is ready
     if touch_controller.get_state() != State::Ready {
@@ -100,23 +112,55 @@ async fn main(_spawner: embassy_executor::Spawner) {
     let mut led = Output::new(context.PA5, Level::High, Speed::Low);
 
     // smaller sample capacitor discharge faster and can be used with shorter delay.
-    let discharge_delay = 5; // ms
+    let discharge_delay = 10; // ms
+
+    let sensors1 = [chan1];
+    let sensors2 = [chan2];
 
     info!("Starting touch_controller interface");
     loop {
+        touch_controller.set_active_channels(&sensors1).unwrap();
+
         touch_controller.start();
         touch_controller.pend_for_acquisition().await;
         touch_controller.discharge_io(true);
         Timer::after_millis(discharge_delay).await;
 
-        let grp1_status = touch_controller.group_get_status(Group::One);
-        match grp1_status {
+        let grp_status = touch_controller.group_get_status(group);
+        match grp_status {
             GroupStatus::Complete => {
-                let group_one_val = touch_controller.group_get_value(Group::One);
-                info!("{}", group_one_val);
-                led.set_high();
+                let group_val = touch_controller.group_get_value(group);
+                info!("sensor1: {}", group_val);
+
+                if group_val < 40 {
+                    led.set_high();
+                } else {
+                    led.set_low();
+                }
             }
             GroupStatus::Ongoing => led.set_low(),
         }
+
+        touch_controller.stop();
+        Timer::after_millis(500).await;
+
+        touch_controller.set_active_channels(&sensors2).unwrap();
+
+        touch_controller.start();
+        touch_controller.pend_for_acquisition().await;
+        touch_controller.discharge_io(true);
+        Timer::after_millis(discharge_delay).await;
+
+        let grp_status = touch_controller.group_get_status(group);
+        match grp_status {
+            GroupStatus::Complete => {
+                let group_val = touch_controller.group_get_value(group);
+                info!("sensor2: {}", group_val);
+            }
+            GroupStatus::Ongoing => (),
+        }
+
+        touch_controller.stop();
+        Timer::after_millis(500).await;
     }
 }

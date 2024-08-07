@@ -1,7 +1,41 @@
-use core::ops::BitOr;
+use core::ops::{BitOr, BitAnd, BitOrAssign};
+
+/// Group identifier used to interrogate status
+#[allow(missing_docs)]
+#[derive(PartialEq,Clone,Copy)]
+pub enum Group {
+    One,
+    Two,
+    Three,
+    Four,
+    Five,
+    Six,
+    #[cfg(any(tsc_v2, tsc_v3))]
+    Seven,
+    #[cfg(tsc_v3)]
+    Eight,
+}
+
+impl Into<usize> for Group {
+    fn into(self) -> usize {
+        match self {
+            Group::One => 0,
+            Group::Two => 1,
+            Group::Three => 2,
+            Group::Four => 3,
+            Group::Five => 4,
+            Group::Six => 5,
+            #[cfg(any(tsc_v2, tsc_v3))]
+            Group::Seven => 6,
+            #[cfg(tsc_v3)]
+            Group::Eight => 7,
+        }
+    }
+}
 
 /// Pin defines
 #[allow(missing_docs)]
+#[derive(PartialEq,Clone,Copy)]
 pub enum TscIOPin {
     Group1Io1,
     Group1Io2,
@@ -45,6 +79,27 @@ pub enum TscIOPin {
     Group8Io4,
 }
 
+impl TscIOPin {
+    /// Maps this TscIOPin to the Group it belongs to.
+    ///
+    /// This method provides a convenient way to determine which Group
+    /// a specific TSC I/O pin is associated with.
+    pub fn group(&self) -> Group {
+        match self {
+            TscIOPin::Group1Io1 | TscIOPin::Group1Io2 | TscIOPin::Group1Io3 | TscIOPin::Group1Io4 => Group::One,
+            TscIOPin::Group2Io1 | TscIOPin::Group2Io2 | TscIOPin::Group2Io3 | TscIOPin::Group2Io4 => Group::Two,
+            TscIOPin::Group3Io1 | TscIOPin::Group3Io2 | TscIOPin::Group3Io3 | TscIOPin::Group3Io4 => Group::Three,
+            TscIOPin::Group4Io1 | TscIOPin::Group4Io2 | TscIOPin::Group4Io3 | TscIOPin::Group4Io4 => Group::Four,
+            TscIOPin::Group5Io1 | TscIOPin::Group5Io2 | TscIOPin::Group5Io3 | TscIOPin::Group5Io4 => Group::Five,
+            TscIOPin::Group6Io1 | TscIOPin::Group6Io2 | TscIOPin::Group6Io3 | TscIOPin::Group6Io4 => Group::Six,
+            #[cfg(any(tsc_v2, tsc_v3))]
+            TscIOPin::Group7Io1 | TscIOPin::Group7Io2 | TscIOPin::Group7Io3 | TscIOPin::Group7Io4 => Group::Seven,
+            #[cfg(tsc_v3)]
+            TscIOPin::Group8Io1 | TscIOPin::Group8Io2 | TscIOPin::Group8Io3 | TscIOPin::Group8Io4 => Group::Eight,
+        }
+    }
+}
+
 impl BitOr<TscIOPin> for u32 {
     type Output = u32;
     fn bitor(self, rhs: TscIOPin) -> Self::Output {
@@ -67,6 +122,29 @@ impl BitOr for TscIOPin {
         let val: u32 = self.into();
         let rhs: u32 = rhs.into();
         val | rhs
+    }
+}
+
+impl BitOrAssign<TscIOPin> for u32 {
+    fn bitor_assign(&mut self, rhs: TscIOPin) {
+        let rhs: u32 = rhs.into();
+        *self |= rhs;
+    }
+}
+
+impl BitAnd<TscIOPin> for u32 {
+    type Output = u32;
+    fn bitand(self, rhs: TscIOPin) -> Self::Output {
+        let rhs: u32 = rhs.into();
+        self & rhs
+    }
+}
+
+impl BitAnd<u32> for TscIOPin {
+    type Output = u32;
+    fn bitand(self, rhs: u32) -> Self::Output {
+        let val: u32 = self.into();
+        val & rhs
     }
 }
 

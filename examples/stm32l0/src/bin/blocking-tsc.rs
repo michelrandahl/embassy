@@ -76,7 +76,7 @@ async fn main(_spawner: embassy_executor::Spawner) {
         None,
         None,
         tsc_conf,
-    );
+    ).unwrap();
 
     // Check if TSC is ready
     if touch_controller.get_state() != State::Ready {
